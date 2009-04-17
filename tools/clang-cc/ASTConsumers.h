@@ -44,7 +44,12 @@ ASTConsumer *CreateCodeRewriterTest(const std::string& InFile,
                                     const std::string& OutFile,
                                     Diagnostic &Diags,
                                     const LangOptions &LOpts);
-  
+
+ASTConsumer *CreateCodeRewriterGtk(const std::string& InFile,
+				   const std::string& OutFile,
+				   Diagnostic &Diags,
+				   const LangOptions& LOpts);
+
 enum BackendAction {
   Backend_EmitAssembly,
   Backend_EmitBC,
@@ -63,11 +68,11 @@ ASTConsumer* CreateHTMLPrinter(const std::string &OutFile, Diagnostic &D,
 
 ASTConsumer *CreateSerializationTest(Diagnostic &Diags,
                                      FileManager &FMgr);
-  
+
 ASTConsumer *CreateASTSerializer(const std::string &InFile,
                                  const std::string &EmitDir,
                                  Diagnostic &Diags);
-  
+
 ASTConsumer *CreatePCHGenerator(const Preprocessor &PP,
                                 const std::string &OutFile);
 
@@ -75,7 +80,7 @@ ASTConsumer *CreateBlockRewriter(const std::string &InFile,
                                  const std::string &OutFile,
                                  Diagnostic &Diags,
                                  const LangOptions &LangOpts);
-  
+
 ASTConsumer *CreateInheritanceViewer(const std::string& clsname);
 
 ASTConsumer* CreateAnalysisConsumer(Diagnostic &diags, Preprocessor *pp,

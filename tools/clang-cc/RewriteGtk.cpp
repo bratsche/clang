@@ -17,6 +17,7 @@
 #include "llvm/System/Path.h"
 #include <fstream>
 #include <sstream>
+#include <stdio.h>
 
 using namespace clang;
 
@@ -28,12 +29,13 @@ namespace {
   public:
     std::string comment;
     std::string accessor;
+    std::string reference;
     bool appendNullArg;
 
     RewriteItem(const char *klass, const char *member, const char *comment, const char *accessor,
-                bool appendNullArg)
+                const char *reference, bool appendNullArg)
       : klass(klass), member(member), comment(comment), accessor(accessor),
-        appendNullArg(appendNullArg) {}
+	reference(reference ? reference : ""), appendNullArg(appendNullArg) {}
 
     static std::string getKey(std::string type, std::string member) {
       return type + "::" + member;
@@ -184,12 +186,12 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
   RewriteFailedDiag = Diags.getCustomDiagID(Diagnostic::Warning,
                                             "rewriting sub-expression within a macro (may not be correct)");
 
-  std::ifstream infile (PREFIX "/share/clang-gtk/gtk.rewrites", std::ios_base::in);
+  std::ifstream infile ("/usr/local/share/clang-gtk/gtk.rewrites", std::ios_base::in);
   std::string line;
   std::string klass;
 
   while (getline(infile, line)) {
-    char *member, *accessor, *comment, *function;
+    char *member, *accessor, *comment, *function, *reference;
     bool appendNullArg;
 
     // Skip comments and empty lines.
@@ -215,11 +217,13 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
     comment = GetRewriteItemAttributeString(line, "comment");
     appendNullArg = GetRewriteItemAttributeBool(line, "append-null-arg");
     function = GetRewriteItemAttribute(line, "function");
+    reference = GetRewriteItemAttribute(line, "reference");
 
     if (member && accessor) {
       RewriteItem *item = new RewriteItem (klass.c_str(),
                                            member, comment,
-                                           accessor, appendNullArg);
+                                           accessor, reference,
+					   appendNullArg);
       rewriteItemMap[item->getKey()] = item;
     }
     else if (function && accessor) {
@@ -234,6 +238,8 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
       free (comment);
     if (function)
       free (function);
+    if (reference)
+      free (reference);
   }
 }
 
@@ -293,6 +299,8 @@ void RewriteGtk::HandleDeclInMainFile(Decl *D)
   if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
     if (CompoundStmt *body = FD->getBody()) {
       body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body));
+      printf (" ** RewriteFunctionBodyOrGlobalInitializer()\n");
+      body->dumpPretty ();
       FD->setBody(body);
     }
   }

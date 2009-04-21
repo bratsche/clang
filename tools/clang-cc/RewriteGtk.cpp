@@ -192,7 +192,11 @@ namespace {
     bool HandleCompoundAssignOperator(Stmt *stmt, std::string accessor);
 
     void RewriteInclude();
-    Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S, int depth, std::vector<LocalReferenceItem*>& new_locals);
+    Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S, int depth,
+						 std::vector<LocalReferenceItem*>& new_locals,
+						 std::vector<std::string>& existingLocals);
+    std::string CreateUniqueLocalName(std::string proposedName,
+				      std::vector<std::string>& reservedNames);
   };
 }
 
@@ -317,9 +321,11 @@ void RewriteGtk::HandleDeclInMainFile(Decl *D)
   std::vector<LocalReferenceItem*> new_locals;
   std::vector<LocalReferenceItem*>::iterator iter, end;
 
+  std::vector<std::string> existingLocals;
+
   if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
     if (CompoundStmt *body = FD->getBody()) {
-      body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body, 0, new_locals));
+      body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body, 0, new_locals, existingLocals));
       FD->setBody(body);
     }
   }
@@ -580,12 +586,41 @@ bool RewriteGtk::HandleCompoundAssignOperator(Stmt *stmt, std::string accessor)
   return false;
 }
 
+// When we're injecting new local variables at the top of the function,
+// make sure the local variable is unique.  Just append a number to the
+// end of it.
+std::string RewriteGtk::CreateUniqueLocalName(std::string proposedName,
+					      std::vector<std::string>& reservedNames)
+{
+  std::vector<std::string>::iterator iter;
+  std::string name = proposedName;
+  int n = 0;
+
+  do
+    {
+      iter = find(reservedNames.begin(), reservedNames.end(), name);
+
+      if (iter == reservedNames.end())
+	{
+	  return name;
+	}
+      else
+	{
+	  std::stringstream ss;
+	  ss << proposedName << n;
+	  name = ss.str();
+	  n++;
+	}
+    } while (1);
+}
+
 /* Handle rewriting direct accesses of member fields to use accessors
  * instead. We look for occurances of MemberExpr whose FieldDecl's
  * name and type matches one of our rewrite candidates.
  */
 Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
-							 std::vector<LocalReferenceItem*>& new_locals)
+							 std::vector<LocalReferenceItem*>& new_locals,
+							 std::vector<std::string>& existingLocals)
 {
   Stmt *lastLocalDecl = NULL;
 
@@ -615,12 +650,12 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		      // against and make sure we don't have conflicts.
 		      NamedDecl* named = dyn_cast<NamedDecl>(decl);
 
-		      //printf ("NamedDecl: %s\n", named->getNameAsCString ());
+		      existingLocals.push_back (named->getNameAsString());
 		    }
 		}
 	    }
 
-	  Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1, new_locals);
+	  Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1, new_locals, existingLocals);
 	  if (newStmt)
 	    *childIter = newStmt;
 	}
@@ -759,21 +794,29 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
 	  if (lastLocalDecl == NULL)
 	    {
+	      std::string localName;
 	      Stmt::child_iterator child = stmt->child_begin();
 	      loc = (*child)->getLocStart();
 
 	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 		{
-		  newText += (*iter)->refType + " " + (*iter)->localName + ";\n";
+		  localName = CreateUniqueLocalName((*iter)->localName, existingLocals);
+		  newText += (*iter)->refType + " " + localName + ";\n";
+
+		  (*iter)->localName = localName;
 		}
 	    }
 	  else
 	    {
+	      std::string localName;
 	      loc = lastLocalDecl->getLocEnd();
 
 	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 		{
-		  newText += ";\n  " + (*iter)->refType + " " + (*iter)->localName;
+		  localName = CreateUniqueLocalName((*iter)->localName, existingLocals);
+		  newText += ";\n  " + (*iter)->refType + " " + localName;
+
+		  (*iter)->localName = localName;
 		}
 	    }
 

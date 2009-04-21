@@ -25,9 +25,10 @@ namespace {
   struct LocalReferenceItem {
     std::string refType;
     std::string localName;
+    std::string accessor;
 
-    LocalReferenceItem(const std::string& refType, const std::string& localName)
-      : refType(refType), localName(localName) { }
+    LocalReferenceItem(const std::string& refType, const std::string& localName, const std::string& accessor)
+      : refType(refType), localName(localName), accessor(accessor) { }
   };
 
   class RewriteItem {
@@ -662,7 +663,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		  localName += "_";
 		  localName += memberName;
 
-		  new_locals.push_back(new LocalReferenceItem(ref, localName));
+		  new_locals.push_back(new LocalReferenceItem(ref, localName, item->accessor));
 
 		  startBuf = SM->getCharacterData(start);
 		  endBuf = SM->getCharacterData(end) + strlen(memberName);
@@ -751,26 +752,38 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
       if (!isa<DeclStmt>(stmt) && depth == 0)
 	{
 	  std::vector<LocalReferenceItem*>::iterator iter, end;
+	  std::string newText = "";
+	  SourceLocation loc;
+
+	  if (lastLocalDecl == NULL)
+	    {
+	      Stmt::child_iterator child = stmt->child_begin();
+	      loc = (*child)->getLocStart();
+
+	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+		{
+		  newText += (*iter)->refType + " " + (*iter)->localName + ";\n";
+		}
+	    }
+	  else
+	    {
+	      loc = lastLocalDecl->getLocEnd();
+
+	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+		{
+		  newText += ";\n  " + (*iter)->refType + " " + (*iter)->localName;
+		}
+	    }
+
+	  newText += ";\n\n";
 
 	  for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 	    {
-	      SourceLocation loc;
-	      std::string local;
-
-	      if (lastLocalDecl == NULL)
-		{
-		  Stmt::child_iterator child = stmt->child_begin();
-		  local = (*iter)->refType + " " + (*iter)->localName + ";\n";
-		  loc = (*child)->getLocStart();
-		}
-	      else
-		{
-		  local = ";\n  " + (*iter)->refType + " " + (*iter)->localName;
-		  loc = lastLocalDecl->getLocEnd();
-		}
-
-	      InsertText (loc, local.c_str(), local.size());
+	      // Move this into getFormattedAccessor() probably
+	      newText += "  " + (*iter)->accessor + "(&" + (*iter)->localName + ")";
 	    }
+
+	  InsertText(loc, newText.c_str(), newText.size());
 	}
     }
 

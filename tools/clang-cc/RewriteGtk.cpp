@@ -645,35 +645,43 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
         // FIXME: I think that the phys part here can be moved to just
         // the replacetext call since getchardata does it already...
         //
-        SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
-        SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
+	if (item->hasReference ())
+	  {
+	    SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
+	    SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
+	    std::string ref = item->getReferenceType();
+	    std::string localName = declName;
+	    const char* startBuf;
+	    const char* endBuf;
 
-        const char *startBuf = SM->getCharacterData(start);
-        const char *endBuf = SM->getCharacterData(end) + strlen(memberName);
+	    localName += "_";
+	    localName += memberName;
 
-        std::string str = item->getFormattedAccessor(declName);
+	    new_locals.push_back(new LocalReferenceItem(ref, localName));
 
-        if (!item->accessor.empty())
-          ReplaceText(start, endBuf - startBuf, str.c_str(), str.size());
+	    startBuf = SM->getCharacterData(start);
+	    endBuf = SM->getCharacterData(end) + strlen(memberName);
 
-        if (lastStmt && !item->comment.empty()) {
-          InsertComment(item->getFormattedComment());
-        }
+	    ReplaceText(start, endBuf - startBuf, localName.c_str(), localName.size());
+	  }
+	else
+	  {
+	    SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
+	    SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
 
-	// XXX
-	if (item->hasReference ()) {
-	  std::string ref = item->getReferenceType();
-	  std::string localName = declName;
+	    const char *startBuf = SM->getCharacterData(start);
+	    const char *endBuf = SM->getCharacterData(end) + strlen(memberName);
 
-	  printf ("reference type is: %s  <---------------------------------------\n", ref.c_str());
+	    std::string str = item->getFormattedAccessor(declName);
 
-	  printf ("declName == %s, memberName == %s\n", declName, memberName);
+	    if (!item->accessor.empty())
+	      ReplaceText(start, endBuf - startBuf, str.c_str(), str.size());
 
-	  localName += "_";
-	  localName += memberName;
-
-	  new_locals.push_back(new LocalReferenceItem(ref, localName));
-	}
+	    if (lastStmt && !item->comment.empty())
+	      {
+		InsertComment(item->getFormattedComment());
+	      }
+	  }
 
         return stmt;
       }

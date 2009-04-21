@@ -26,9 +26,11 @@ namespace {
     std::string refType;
     std::string localName;
     std::string accessor;
+    std::string objName;
 
-    LocalReferenceItem(const std::string& refType, const std::string& localName, const std::string& accessor)
-      : refType(refType), localName(localName), accessor(accessor) { }
+    LocalReferenceItem(const std::string& refType, const std::string& localName,
+		       const std::string& accessor, const std::string& objName)
+      : refType(refType), localName(localName), accessor(accessor), objName(objName) { }
   };
 
   class RewriteItem {
@@ -663,7 +665,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		  localName += "_";
 		  localName += memberName;
 
-		  new_locals.push_back(new LocalReferenceItem(ref, localName, item->accessor));
+		  new_locals.push_back(new LocalReferenceItem(ref, localName, item->accessor, declName));
 
 		  startBuf = SM->getCharacterData(start);
 		  endBuf = SM->getCharacterData(end) + strlen(memberName);
@@ -780,7 +782,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 	  for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 	    {
 	      // Move this into getFormattedAccessor() probably
-	      newText += "  " + (*iter)->accessor + "(&" + (*iter)->localName + ")";
+	      newText += "  " + (*iter)->accessor + "(" + (*iter)->objName + ", &" + (*iter)->localName + ")";
 	    }
 
 	  InsertText(loc, newText.c_str(), newText.size());

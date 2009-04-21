@@ -590,146 +590,156 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
   for (Stmt::child_iterator childIter = stmt->child_begin(), E = stmt->child_end();
        childIter != E; ++childIter)
     {
-      if (*childIter) {
-	if (isa<CompoundStmt>(stmt)) {
-	  lastStmt = *childIter;
+      if (*childIter)
+	{
+	  if (isa<CompoundStmt>(stmt))
+	    {
+	      lastStmt = *childIter;
+	    }
+
+	  if (isa<DeclStmt>(*childIter))
+	    {
+	      DeclStmt *decl_stmt = dyn_cast<DeclStmt>(*childIter);
+	      lastLocalDecl = *childIter;
+
+	      if (decl_stmt->isSingleDecl() && depth == 0)
+		{
+		  Decl *decl = decl_stmt->getSingleDecl();
+
+		  if (isa<NamedDecl>(decl))
+		    {
+		      // Local variables.. TODO: build a list of these to check new_locals
+		      // against and make sure we don't have conflicts.
+		      NamedDecl* named = dyn_cast<NamedDecl>(decl);
+
+		      printf ("NamedDecl: %s\n", named->getNameAsCString ());
+		    }
+		}
+	    }
+
+	  Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1, new_locals);
+	  if (newStmt)
+	    *childIter = newStmt;
 	}
-
-	if (isa<DeclStmt>(*childIter))
-	  {
-	    DeclStmt *decl_stmt = dyn_cast<DeclStmt>(*childIter);
-	    lastLocalDecl = *childIter;
-
-	    if (decl_stmt->isSingleDecl() && depth == 0)
-	      {
-		Decl *decl = decl_stmt->getSingleDecl();
-
-		if (isa<NamedDecl>(decl))
-		  {
-		    // Local variables.. TODO: build a list of these to check new_locals
-		    // against and make sure we don't have conflicts.
-		    NamedDecl* named = dyn_cast<NamedDecl>(decl);
-
-		    printf ("NamedDecl: %s\n", named->getNameAsCString ());
-		  }
-	      }
-	  }
-
-	Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1, new_locals);
-	if (newStmt)
-	  *childIter = newStmt;
-      }
     }
 
-  if (MemberExpr *memberExpr = dyn_cast<MemberExpr>(stmt)) {
-    if (memberExpr->isArrow()) {
-      Expr *base = memberExpr->getBase()->IgnoreParens();
-      FieldDecl *memberDecl = dyn_cast<FieldDecl>(memberExpr->getMemberDecl());
-      const char *memberName = memberDecl->getNameAsCString();
+  if (MemberExpr *memberExpr = dyn_cast<MemberExpr>(stmt))
+    {
+      if (memberExpr->isArrow())
+	{
+	  Expr *base = memberExpr->getBase()->IgnoreParens();
+	  FieldDecl *memberDecl = dyn_cast<FieldDecl>(memberExpr->getMemberDecl());
+	  const char *memberName = memberDecl->getNameAsCString();
 
-      if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(base)) {
-        ValueDecl *valueDecl = dyn_cast<ValueDecl>(declRefExpr->getDecl());
-        QualType type = valueDecl->getType();
-        const char *declName = valueDecl->getNameAsCString();
+	  if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(base))
+	    {
+	      ValueDecl *valueDecl = dyn_cast<ValueDecl>(declRefExpr->getDecl());
+	      QualType type = valueDecl->getType();
+	      const char *declName = valueDecl->getNameAsCString();
 
-        RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
+	      RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
 
-        if (item == NULL)
-          return stmt;
+	      if (item == NULL)
+		return stmt;
 
-        if (HandleUnaryOperator(stmt, memberDecl->getType(), item->getFormattedAccessor(declName)) ||
-            HandleBinaryOperator(stmt, item->getFormattedAccessor(declName)) ||
-            HandleCompoundAssignOperator(stmt, item->getFormattedAccessor(declName)))
-          return stmt;
+	      if (HandleUnaryOperator(stmt, memberDecl->getType(), item->getFormattedAccessor(declName)) ||
+		  HandleBinaryOperator(stmt, item->getFormattedAccessor(declName)) ||
+		  HandleCompoundAssignOperator(stmt, item->getFormattedAccessor(declName)))
+		return stmt;
 
-        // FIXME: I think that the phys part here can be moved to just
-        // the replacetext call since getchardata does it already...
-        //
-	if (item->hasReference ())
-	  {
-	    SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
-	    SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
-	    std::string ref = item->getReferenceType();
-	    std::string localName = declName;
-	    const char* startBuf;
-	    const char* endBuf;
+	      // FIXME: I think that the phys part here can be moved to just
+	      // the replacetext call since getchardata does it already...
+	      //
+	      if (item->hasReference ())
+		{
+		  SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
+		  SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
+		  std::string ref = item->getReferenceType();
+		  std::string localName = declName;
+		  const char* startBuf;
+		  const char* endBuf;
 
-	    localName += "_";
-	    localName += memberName;
+		  localName += "_";
+		  localName += memberName;
 
-	    new_locals.push_back(new LocalReferenceItem(ref, localName));
+		  new_locals.push_back(new LocalReferenceItem(ref, localName));
 
-	    startBuf = SM->getCharacterData(start);
-	    endBuf = SM->getCharacterData(end) + strlen(memberName);
+		  startBuf = SM->getCharacterData(start);
+		  endBuf = SM->getCharacterData(end) + strlen(memberName);
 
-	    ReplaceText(start, endBuf - startBuf, localName.c_str(), localName.size());
-	  }
-	else
-	  {
-	    SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
-	    SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
+		  ReplaceText(start, endBuf - startBuf, localName.c_str(), localName.size());
+		}
+	      else
+		{
+		  SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
+		  SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
 
-	    const char *startBuf = SM->getCharacterData(start);
-	    const char *endBuf = SM->getCharacterData(end) + strlen(memberName);
+		  const char *startBuf = SM->getCharacterData(start);
+		  const char *endBuf = SM->getCharacterData(end) + strlen(memberName);
 
-	    std::string str = item->getFormattedAccessor(declName);
+		  std::string str = item->getFormattedAccessor(declName);
 
-	    if (!item->accessor.empty())
-	      ReplaceText(start, endBuf - startBuf, str.c_str(), str.size());
+		  if (!item->accessor.empty())
+		    ReplaceText(start, endBuf - startBuf, str.c_str(), str.size());
 
-	    if (lastStmt && !item->comment.empty())
-	      {
-		InsertComment(item->getFormattedComment());
-	      }
-	  }
+		  if (lastStmt && !item->comment.empty())
+		    {
+		      InsertComment(item->getFormattedComment());
+		    }
+		}
 
-        return stmt;
-      }
-      else if (CastExpr *castExpr = dyn_cast<CastExpr>(base)) {
-        QualType type = castExpr->getType();
+	      return stmt;
+	    }
+	  else if (CastExpr *castExpr = dyn_cast<CastExpr>(base))
+	    {
+	      QualType type = castExpr->getType();
 
-        RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
-        if (item == NULL)
-          return stmt;
+	      RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
+	      if (item == NULL)
+		return stmt;
 
-        SourceLocation startLoc = stmt->getLocStart();
-        SourceLocation endLoc = stmt->getLocEnd();
+	      SourceLocation startLoc = stmt->getLocStart();
+	      SourceLocation endLoc = stmt->getLocEnd();
 
-        // Need to get logical loc since the loc is pointing to the
-        // macro definition.
-        startLoc = SM->getInstantiationLoc(startLoc);
-        endLoc = SM->getInstantiationLoc(endLoc);
+	      // Need to get logical loc since the loc is pointing to the
+	      // macro definition.
+	      startLoc = SM->getInstantiationLoc(startLoc);
+	      endLoc = SM->getInstantiationLoc(endLoc);
 
-        const char *startBuf = SM->getCharacterData(startLoc);
-        const char *endBuf = SM->getCharacterData(endLoc);
+	      const char *startBuf = SM->getCharacterData(startLoc);
+	      const char *endBuf = SM->getCharacterData(endLoc);
 
-        if (endBuf > startBuf) {
-          // Get the cast but not the arrow, i.e. FOO(bar).
-          std::string str = item->getFormattedAccessor(std::string(startBuf, endBuf - startBuf - 2));
+	      if (endBuf > startBuf)
+		{
+		  // Get the cast but not the arrow, i.e. FOO(bar).
+		  std::string str = item->getFormattedAccessor(std::string(startBuf, endBuf - startBuf - 2));
 
-          if (HandleUnaryOperator(stmt, memberDecl->getType(), str) ||
-              HandleBinaryOperator(stmt, str) ||
-              HandleCompoundAssignOperator(stmt, str))
-            return stmt;
+		  if (HandleUnaryOperator(stmt, memberDecl->getType(), str) ||
+		      HandleBinaryOperator(stmt, str) ||
+		      HandleCompoundAssignOperator(stmt, str))
+		    return stmt;
 
-          if (!item->accessor.empty())
-            ReplaceText(startLoc, endBuf - startBuf + strlen(memberName), str.c_str(), str.size());
-        } else {
-          // Happens when the sourceloc isn't tracked properly so we
-          // can't do any rewrite (currently this happens for nested
-          // macros for example). We could try to directly parse the
-          // text buffer and do some simple rewrites, that could help
-          // with cases like "GTK_BOX (GTK_DIALOG (dialog)->vbox)".
-        }
+		  if (!item->accessor.empty())
+		    ReplaceText(startLoc, endBuf - startBuf + strlen(memberName), str.c_str(), str.size());
+		}
+	      else
+		{
+		  // Happens when the sourceloc isn't tracked properly so we
+		  // can't do any rewrite (currently this happens for nested
+		  // macros for example). We could try to directly parse the
+		  // text buffer and do some simple rewrites, that could help
+		  // with cases like "GTK_BOX (GTK_DIALOG (dialog)->vbox)".
+		}
 
-        if (lastStmt && !item->comment.empty()) {
-          InsertComment(item->getFormattedComment());
-        }
+	      if (lastStmt && !item->comment.empty())
+		{
+		  InsertComment(item->getFormattedComment());
+		}
 
-        return stmt;
-      }
+	      return stmt;
+	    }
+	}
     }
-  }
 
   // Inject any new local variables needed for get-by-reference functions
   if (!new_locals.empty())

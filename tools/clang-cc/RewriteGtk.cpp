@@ -613,7 +613,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		      // against and make sure we don't have conflicts.
 		      NamedDecl* named = dyn_cast<NamedDecl>(decl);
 
-		      printf ("NamedDecl: %s\n", named->getNameAsCString ());
+		      //printf ("NamedDecl: %s\n", named->getNameAsCString ());
 		    }
 		}
 	    }

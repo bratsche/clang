@@ -22,6 +22,14 @@
 using namespace clang;
 
 namespace {
+  struct LocalReferenceItem {
+    std::string refType;
+    std::string localName;
+
+    LocalReferenceItem(const std::string& refType, const std::string& localName)
+      : refType(refType), localName(localName) { }
+  };
+
   class RewriteItem {
     std::string klass;
     std::string member;
@@ -60,6 +68,13 @@ namespace {
         return "/* REWRITE: " + comment + " */";
     }
 
+    bool hasReference() {
+      return !reference.empty();
+    }
+
+    std::string getReferenceType() {
+      return reference;
+    }
   };
 
   class RewriteGtk : public ASTConsumer {
@@ -174,7 +189,7 @@ namespace {
     bool HandleCompoundAssignOperator(Stmt *stmt, std::string accessor);
 
     void RewriteInclude();
-    Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S);
+    Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S, int depth, std::vector<LocalReferenceItem*>& new_locals);
   };
 }
 
@@ -296,13 +311,22 @@ void RewriteGtk::HandleTopLevelSingleDecl(Decl *D)
 /// main file of the input.
 void RewriteGtk::HandleDeclInMainFile(Decl *D)
 {
+  std::vector<LocalReferenceItem*> new_locals;
+  std::vector<LocalReferenceItem*>::iterator iter, end;
+
   if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
     if (CompoundStmt *body = FD->getBody()) {
-      body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body));
-      printf (" ** RewriteFunctionBodyOrGlobalInitializer()\n");
-      body->dumpPretty ();
+      body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body, 0, new_locals));
       FD->setBody(body);
     }
+  }
+
+  if (!new_locals.empty()) {
+    for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+      {
+	printf (" ======= Iter: %s, %s ============\n", (*iter)->refType.c_str(), (*iter)->localName.c_str());
+	delete *iter;
+      }
   }
 }
 
@@ -557,19 +581,44 @@ bool RewriteGtk::HandleCompoundAssignOperator(Stmt *stmt, std::string accessor)
  * instead. We look for occurances of MemberExpr whose FieldDecl's
  * name and type matches one of our rewrite candidates.
  */
-Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt)
+Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
+							 std::vector<LocalReferenceItem*>& new_locals)
 {
+  Stmt *lastLocalDecl = NULL;
+
   // Start by rewriting all children.
   for (Stmt::child_iterator childIter = stmt->child_begin(), E = stmt->child_end();
        childIter != E; ++childIter)
-    if (*childIter) {
-      if (isa<CompoundStmt>(stmt)) {
-        lastStmt = *childIter;
-      }
+    {
+      if (*childIter) {
+	if (isa<CompoundStmt>(stmt)) {
+	  lastStmt = *childIter;
+	}
 
-      Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter);
-      if (newStmt)
-        *childIter = newStmt;
+	if (isa<DeclStmt>(*childIter))
+	  {
+	    DeclStmt *decl_stmt = dyn_cast<DeclStmt>(*childIter);
+	    lastLocalDecl = *childIter;
+
+	    if (decl_stmt->isSingleDecl() && depth == 0)
+	      {
+		Decl *decl = decl_stmt->getSingleDecl();
+
+		if (isa<NamedDecl>(decl))
+		  {
+		    // Local variables.. TODO: build a list of these to check new_locals
+		    // against and make sure we don't have conflicts.
+		    NamedDecl* named = dyn_cast<NamedDecl>(decl);
+
+		    printf ("NamedDecl: %s\n", named->getNameAsCString ());
+		  }
+	      }
+	  }
+
+	Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1, new_locals);
+	if (newStmt)
+	  *childIter = newStmt;
+      }
     }
 
   if (MemberExpr *memberExpr = dyn_cast<MemberExpr>(stmt)) {
@@ -584,6 +633,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt)
         const char *declName = valueDecl->getNameAsCString();
 
         RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
+
         if (item == NULL)
           return stmt;
 
@@ -609,6 +659,21 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt)
         if (lastStmt && !item->comment.empty()) {
           InsertComment(item->getFormattedComment());
         }
+
+	// XXX
+	if (item->hasReference ()) {
+	  std::string ref = item->getReferenceType();
+	  std::string localName = declName;
+
+	  printf ("reference type is: %s  <---------------------------------------\n", ref.c_str());
+
+	  printf ("declName == %s, memberName == %s\n", declName, memberName);
+
+	  localName += "_";
+	  localName += memberName;
+
+	  new_locals.push_back(new LocalReferenceItem(ref, localName));
+	}
 
         return stmt;
       }
@@ -657,6 +722,39 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt)
       }
     }
   }
+
+  // Inject any new local variables needed for get-by-reference functions
+  if (!new_locals.empty())
+    {
+      // Remove duplicates
+      std::sort(new_locals.begin(), new_locals.end());
+      new_locals.erase (std::unique (new_locals.begin(), new_locals.end()), new_locals.end());
+
+      if (!isa<DeclStmt>(stmt) && depth == 0)
+	{
+	  std::vector<LocalReferenceItem*>::iterator iter, end;
+
+	  for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+	    {
+	      SourceLocation loc;
+	      std::string local;
+
+	      if (lastLocalDecl == NULL)
+		{
+		  Stmt::child_iterator child = stmt->child_begin();
+		  local = (*iter)->refType + " " + (*iter)->localName + ";\n";
+		  loc = (*child)->getLocStart();
+		}
+	      else
+		{
+		  local = ";\n  " + (*iter)->refType + " " + (*iter)->localName;
+		  loc = lastLocalDecl->getLocEnd();
+		}
+
+	      InsertText (loc, local.c_str(), local.size());
+	    }
+	}
+    }
 
   return stmt;
 }

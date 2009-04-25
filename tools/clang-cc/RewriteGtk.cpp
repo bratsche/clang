@@ -31,6 +31,13 @@ namespace {
     LocalReferenceItem(const std::string& refType, const std::string& localName,
 		       const std::string& accessor, const std::string& objName)
       : refType(refType), localName(localName), accessor(accessor), objName(objName) { }
+
+    LocalReferenceItem(const LocalReferenceItem& item)
+      : refType(item.refType), localName(item.localName), accessor(item.accessor), objName(item.objName) { }
+
+    bool operator==(const LocalReferenceItem& R) const { return localName == R.localName; }
+    bool operator>(const LocalReferenceItem& R) const { return localName > R.localName; }
+    bool operator<(const LocalReferenceItem& R) const { return localName < R.localName; }
   };
 
   class RewriteItem {
@@ -193,7 +200,7 @@ namespace {
 
     void RewriteInclude();
     Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S, int depth,
-						 std::vector<LocalReferenceItem*>& new_locals,
+						 std::vector<LocalReferenceItem>& new_locals,
 						 std::vector<std::string>& existingLocals);
     std::string CreateUniqueLocalName(std::string proposedName,
 				      std::vector<std::string>& reservedNames);
@@ -318,8 +325,8 @@ void RewriteGtk::HandleTopLevelSingleDecl(Decl *D)
 /// main file of the input.
 void RewriteGtk::HandleDeclInMainFile(Decl *D)
 {
-  std::vector<LocalReferenceItem*> new_locals;
-  std::vector<LocalReferenceItem*>::iterator iter, end;
+  std::vector<LocalReferenceItem> new_locals;
+  std::vector<LocalReferenceItem>::iterator iter, end;
 
   std::vector<std::string> existingLocals;
 
@@ -333,8 +340,7 @@ void RewriteGtk::HandleDeclInMainFile(Decl *D)
   if (!new_locals.empty()) {
     for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
       {
-	printf (" ======= Iter: %s, %s ============\n", (*iter)->refType.c_str(), (*iter)->localName.c_str());
-	delete *iter;
+	printf (" ======= Iter: %s, %s ============\n", (*iter).refType.c_str(), (*iter).localName.c_str());
       }
   }
 }
@@ -619,7 +625,7 @@ std::string RewriteGtk::CreateUniqueLocalName(std::string proposedName,
  * name and type matches one of our rewrite candidates.
  */
 Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
-							 std::vector<LocalReferenceItem*>& new_locals,
+							 std::vector<LocalReferenceItem>& new_locals,
 							 std::vector<std::string>& existingLocals)
 {
   Stmt *lastLocalDecl = NULL;
@@ -700,7 +706,10 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		  localName += "_";
 		  localName += memberName;
 
-		  new_locals.push_back(new LocalReferenceItem(ref, localName, item->accessor, declName));
+		  LocalReferenceItem local_item(ref, localName, item->accessor, declName);
+
+		  //new_locals.push_back(new LocalReferenceItem(ref, localName, item->accessor, declName));
+		  new_locals.push_back(local_item);
 
 		  startBuf = SM->getCharacterData(start);
 		  endBuf = SM->getCharacterData(end) + strlen(memberName);
@@ -788,7 +797,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
       if (!isa<DeclStmt>(stmt) && depth == 0)
 	{
-	  std::vector<LocalReferenceItem*>::iterator iter, end;
+	  std::vector<LocalReferenceItem>::iterator iter, end;
 	  std::string newText = "";
 	  SourceLocation loc;
 
@@ -800,10 +809,10 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
 	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 		{
-		  localName = CreateUniqueLocalName((*iter)->localName, existingLocals);
-		  newText += (*iter)->refType + " " + localName + ";\n";
+		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
+		  newText += (*iter).refType + " " + localName + ";\n";
 
-		  (*iter)->localName = localName;
+		  (*iter).localName = localName;
 		}
 	    }
 	  else
@@ -813,10 +822,10 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
 	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 		{
-		  localName = CreateUniqueLocalName((*iter)->localName, existingLocals);
-		  newText += ";\n  " + (*iter)->refType + " " + localName;
+		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
+		  newText += ";\n  " + (*iter).refType + " " + localName;
 
-		  (*iter)->localName = localName;
+		  (*iter).localName = localName;
 		}
 	    }
 
@@ -825,7 +834,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 	  for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
 	    {
 	      // Move this into getFormattedAccessor() probably
-	      newText += "  " + (*iter)->accessor + "(" + (*iter)->objName + ", &" + (*iter)->localName + ")";
+	      newText += "  " + (*iter).accessor + "(" + (*iter).objName + ", &" + (*iter).localName + ")\n";
 	    }
 
 	  InsertText(loc, newText.c_str(), newText.size());

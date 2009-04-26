@@ -109,7 +109,7 @@ namespace {
 
     std::map<std::string, RewriteItem *> rewriteItemMap;
 
-    std::vector<LocalReferenceItem> new_locals;
+    std::vector<LocalReferenceItem> newLocals;
     std::vector<std::string> existingLocals;
 
   public:
@@ -335,8 +335,8 @@ void RewriteGtk::HandleDeclInMainFile(Decl *D)
     }
   }
 
-  if (!new_locals.empty()) {
-    for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+  if (!newLocals.empty()) {
+    for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
       {
 	printf (" ======= Iter: %s, %s ============\n", (*iter).refType.c_str(), (*iter).localName.c_str());
       }
@@ -648,7 +648,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 
 		  if (isa<NamedDecl>(decl))
 		    {
-		      // Build a list of local variables to check new_locals against for
+		      // Build a list of local variables to check newLocals against for
 		      // variable naming conflicts before injecting new variables.
 		      NamedDecl* named = dyn_cast<NamedDecl>(decl);
 
@@ -703,7 +703,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 
 		  LocalReferenceItem local_item(ref, localName, item->accessor, declName);
 
-		  new_locals.push_back(local_item);
+		  newLocals.push_back(local_item);
 
 		  if (start != instStart ||
 		      end != instEnd)
@@ -801,11 +801,11 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
     }
 
   // Inject any new local variables needed for get-by-reference functions
-  if (!new_locals.empty())
+  if (!newLocals.empty())
     {
       // Remove duplicates
-      std::sort(new_locals.begin(), new_locals.end());
-      new_locals.erase (std::unique (new_locals.begin(), new_locals.end()), new_locals.end());
+      std::sort(newLocals.begin(), newLocals.end());
+      newLocals.erase (std::unique (newLocals.begin(), newLocals.end()), newLocals.end());
 
       if (!isa<DeclStmt>(stmt) && depth == 0)
 	{
@@ -819,7 +819,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 	      Stmt::child_iterator child = stmt->child_begin();
 	      loc = (*child)->getLocStart();
 
-	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+	      for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
 		{
 		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
 		  newText += (*iter).refType + " " + localName + ";\n";
@@ -832,7 +832,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 	      std::string localName;
 	      loc = lastLocalDecl->getLocEnd();
 
-	      for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+	      for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
 		{
 		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
 		  newText += ";\n  " + (*iter).refType + " " + localName;
@@ -843,7 +843,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 
 	  newText += ";\n\n";
 
-	  for (iter = new_locals.begin(), end = new_locals.end(); iter != end; iter++)
+	  for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
 	    {
 	      // Move this into getFormattedAccessor() probably
 	      newText += "  " + (*iter).accessor + "(" + (*iter).objName + ", &" + (*iter).localName + ")\n";

@@ -832,24 +832,27 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 	      std::string localName;
 	      loc = lastLocalDecl->getLocEnd();
 
+	      newText += ";\n";
+
 	      for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
 		{
 		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
-		  newText += ";\n  " + (*iter).refType + " " + localName;
+		  newText += "  " + (*iter).refType + " " + localName + ";\n";
 
 		  (*iter).localName = localName;
 		}
 	    }
 
-	  newText += ";\n\n";
+	  newText += "\n";
 
 	  for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
 	    {
 	      // Move this into getFormattedAccessor() probably
-	      newText += "  " + (*iter).accessor + "(" + (*iter).objName + ", &" + (*iter).localName + ")\n";
+	      newText += "  " + (*iter).accessor + "(" + (*iter).objName + ", &" + (*iter).localName + ");\n";
 	    }
 
 	  InsertText(loc, newText.c_str(), newText.size());
+	  RemoveText(loc, 1);  // remove trailing semicolon
 	}
     }
 

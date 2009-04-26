@@ -708,7 +708,6 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
 		  LocalReferenceItem local_item(ref, localName, item->accessor, declName);
 
-		  //new_locals.push_back(new LocalReferenceItem(ref, localName, item->accessor, declName));
 		  new_locals.push_back(local_item);
 
 		  startBuf = SM->getCharacterData(start);

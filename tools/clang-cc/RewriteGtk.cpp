@@ -696,8 +696,10 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 	      //
 	      if (item->hasReference ())
 		{
-		  SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
-		  SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
+		  SourceLocation start = stmt->getLocStart();
+		  SourceLocation end = stmt->getLocEnd();
+		  SourceLocation instStart = SM->getInstantiationLoc(start);
+		  SourceLocation instEnd = SM->getInstantiationLoc(end);
 		  std::string ref = item->getReferenceType();
 		  std::string localName = declName;
 		  const char* startBuf;
@@ -710,6 +712,14 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
 		  new_locals.push_back(local_item);
 
+		  if (start != instStart ||
+		      end != instEnd)
+		    {
+		      InsertComment(std::string("/* REWRITE: Can't rewrite some or all of the next expression due\n"
+						" *          to macro expansions. Use " + localName + ".\n"
+						" */"));
+		    }
+
 		  startBuf = SM->getCharacterData(start);
 		  endBuf = SM->getCharacterData(end) + strlen(memberName);
 
@@ -717,8 +727,18 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		}
 	      else
 		{
-		  SourceLocation start = SM->getInstantiationLoc(stmt->getLocStart());
-		  SourceLocation end = SM->getInstantiationLoc(stmt->getLocEnd());
+		  SourceLocation start = stmt->getLocStart();
+		  SourceLocation end = stmt->getLocEnd();
+		  SourceLocation instStart = SM->getInstantiationLoc(start);
+		  SourceLocation instEnd = SM->getInstantiationLoc(end);
+
+		  if (start != instStart ||
+		      end != instEnd)
+		    {
+		      InsertComment(std::string("/* REWRITE: Can't rewrite some or all of the next expression due\n"
+						" *          to macro expansions. Use " + item->getFormattedAccessor(declName) + ".\n"
+						" */"));
+		    }
 
 		  const char *startBuf = SM->getCharacterData(start);
 		  const char *endBuf = SM->getCharacterData(end) + strlen(memberName);

@@ -679,7 +679,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 	    {
 	      ValueDecl *valueDecl = dyn_cast<ValueDecl>(declRefExpr->getDecl());
 	      QualType type = valueDecl->getType();
-	      const char *declName = valueDecl->getNameAsCString();
+	      const std::string declName = valueDecl->getNameAsString();
 
 	      RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
 
@@ -701,12 +701,9 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		  SourceLocation instStart = SM->getInstantiationLoc(start);
 		  SourceLocation instEnd = SM->getInstantiationLoc(end);
 		  std::string ref = item->getReferenceType();
-		  std::string localName = declName;
+		  std::string localName = declName + "_" + memberName;
 		  const char* startBuf;
 		  const char* endBuf;
-
-		  localName += "_";
-		  localName += memberName;
 
 		  LocalReferenceItem local_item(ref, localName, item->accessor, declName);
 

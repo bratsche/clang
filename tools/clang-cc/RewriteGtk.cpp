@@ -109,6 +109,9 @@ namespace {
 
     std::map<std::string, RewriteItem *> rewriteItemMap;
 
+    std::vector<LocalReferenceItem> new_locals;
+    std::vector<std::string> existingLocals;
+
   public:
     virtual void Initialize(ASTContext &context);
 
@@ -199,9 +202,7 @@ namespace {
     bool HandleCompoundAssignOperator(Stmt *stmt, std::string accessor);
 
     void RewriteInclude();
-    Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S, int depth,
-						 std::vector<LocalReferenceItem>& new_locals,
-						 std::vector<std::string>& existingLocals);
+    Stmt *RewriteFunctionBodyOrGlobalInitializer(Stmt *S, int depth);
     std::string CreateUniqueLocalName(std::string proposedName,
 				      std::vector<std::string>& reservedNames);
   };
@@ -325,14 +326,11 @@ void RewriteGtk::HandleTopLevelSingleDecl(Decl *D)
 /// main file of the input.
 void RewriteGtk::HandleDeclInMainFile(Decl *D)
 {
-  std::vector<LocalReferenceItem> new_locals;
   std::vector<LocalReferenceItem>::iterator iter, end;
-
-  std::vector<std::string> existingLocals;
 
   if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
     if (CompoundStmt *body = FD->getBody()) {
-      body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body, 0, new_locals, existingLocals));
+      body = cast_or_null<CompoundStmt>(RewriteFunctionBodyOrGlobalInitializer(body, 0));
       FD->setBody(body);
     }
   }
@@ -624,9 +622,7 @@ std::string RewriteGtk::CreateUniqueLocalName(std::string proposedName,
  * instead. We look for occurances of MemberExpr whose FieldDecl's
  * name and type matches one of our rewrite candidates.
  */
-Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
-							 std::vector<LocalReferenceItem>& new_locals,
-							 std::vector<std::string>& existingLocals)
+Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 {
   Stmt *lastLocalDecl = NULL;
 
@@ -661,7 +657,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 		}
 	    }
 
-	  Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1, new_locals, existingLocals);
+	  Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1);
 	  if (newStmt)
 	    *childIter = newStmt;
 	}

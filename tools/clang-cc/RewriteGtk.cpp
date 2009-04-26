@@ -652,8 +652,8 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth,
 
 		  if (isa<NamedDecl>(decl))
 		    {
-		      // Local variables.. TODO: build a list of these to check new_locals
-		      // against and make sure we don't have conflicts.
+		      // Build a list of local variables to check new_locals against for
+		      // variable naming conflicts before injecting new variables.
 		      NamedDecl* named = dyn_cast<NamedDecl>(decl);
 
 		      existingLocals.push_back (named->getNameAsString());

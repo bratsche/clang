@@ -1,4 +1,5 @@
-/* RewriteGtk.cpp - refactoring tool to move code from GTK+ 2.x to 3.x
+/* -*  indent-tabs-mode:nil;  -*-
+ * RewriteGtk.cpp - refactoring tool to move code from GTK+ 2.x to 3.x
  * Based on RewriteObjC.cpp, distributed under the University of
  * Illinois Open Source License. See LICENSE.TXT in clang for details.
  */
@@ -29,11 +30,15 @@ namespace {
     std::string objName;
 
     LocalReferenceItem(const std::string& refType, const std::string& localName,
-		       const std::string& accessor, const std::string& objName)
-      : refType(refType), localName(localName), accessor(accessor), objName(objName) { }
+                       const std::string& accessor, const std::string& objName)
+      : refType(refType), localName(localName), accessor(accessor), objName(objName)
+    {
+    }
 
     LocalReferenceItem(const LocalReferenceItem& item)
-      : refType(item.refType), localName(item.localName), accessor(item.accessor), objName(item.objName) { }
+      : refType(item.refType), localName(item.localName), accessor(item.accessor), objName(item.objName)
+    {
+    }
 
     bool operator==(const LocalReferenceItem& R) const { return localName == R.localName; }
     bool operator>(const LocalReferenceItem& R) const { return localName > R.localName; }
@@ -48,13 +53,17 @@ namespace {
     std::string comment;
     std::string accessor;
     std::string getRefType;
+    std::string setter;
     bool appendNullArg;
 
     RewriteItem(const std::string& klass, const std::string& member,
-		const std::string& comment, const std::string& accessor,
-                const std::string& getRefType, bool appendNullArg)
+                const std::string& comment, const std::string& accessor,
+                const std::string& getRefType, const std::string& setter,
+                bool appendNullArg)
       : klass(klass), member(member), comment(comment), accessor(accessor),
-	getRefType(getRefType), appendNullArg(appendNullArg) {}
+	getRefType(getRefType), setter(setter), appendNullArg(appendNullArg)
+    {
+    }
 
     static std::string getKey(std::string type, std::string member) {
       return type + "::" + member;
@@ -115,7 +124,7 @@ namespace {
     // Top Level Driver code.
     virtual void HandleTopLevelDecl(DeclGroupRef D) {
       for (DeclGroupRef::iterator I = D.begin(), E = D.end(); I != E; ++I)
-	HandleTopLevelSingleDecl(*I);
+        HandleTopLevelSingleDecl(*I);
     }
 
     void HandleTopLevelSingleDecl(Decl *D);
@@ -250,7 +259,8 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
       RewriteItem *item = new RewriteItem (klass.c_str(),
                                            member, comment,
                                            accessor, getRefType,
-					   appendNullArg);
+                                           setter,
+                                           appendNullArg);
       rewriteItemMap[item->getKey()] = item;
     }
     else if (!function.empty() && !accessor.empty()) {
@@ -260,9 +270,9 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
 }
 
 ASTConsumer *clang::CreateCodeRewriterGtk(const std::string &InFile,
-					  const std::string &OutFile,
-					  Diagnostic &Diags,
-					  const LangOptions &LOpts)
+                                          const std::string &OutFile,
+                                          Diagnostic &Diags,
+                                          const LangOptions &LOpts)
 {
   return new RewriteGtk(InFile, OutFile, Diags, LOpts);
 }
@@ -324,7 +334,7 @@ void RewriteGtk::HandleDeclInMainFile(Decl *D)
   if (!newLocals.empty()) {
     for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
       {
-	printf (" ======= Iter: %s, %s ============\n", (*iter).refType.c_str(), (*iter).localName.c_str());
+        printf (" ======= Iter: %s, %s ============\n", (*iter).refType.c_str(), (*iter).localName.c_str());
       }
   }
 }
@@ -435,10 +445,10 @@ void RewriteGtk::InsertComment(std::string comment)
       // Replacing all newlines in the comment with the indentation prefix.
       size_t i = 0;
       while ((i = comment.find('\n', i)) != std::string::npos)
-	{
-	  comment = comment.insert(i+1, std::string(startBuf+1, endBuf));
-	  i += endBuf - startBuf;
-	}
+        {
+          comment = comment.insert(i+1, std::string(startBuf+1, endBuf));
+          i += endBuf - startBuf;
+        }
 
       comment.append(startBuf, endBuf);
 
@@ -591,16 +601,16 @@ std::string RewriteGtk::CreateUniqueLocalName(std::string proposedName,
       iter = find(reservedNames.begin(), reservedNames.end(), name);
 
       if (iter == reservedNames.end())
-	{
-	  return name;
-	}
+        {
+          return name;
+        }
       else
-	{
-	  std::stringstream ss;
-	  ss << proposedName << n;
-	  name = ss.str();
-	  n++;
-	}
+        {
+          std::stringstream ss;
+          ss << proposedName << n;
+          name = ss.str();
+          n++;
+        }
     } while (1);
 }
 
@@ -617,173 +627,173 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
        childIter != E; ++childIter)
     {
       if (*childIter)
-	{
-	  if (isa<CompoundStmt>(stmt))
-	    {
-	      lastStmt = *childIter;
-	    }
+        {
+          if (isa<CompoundStmt>(stmt))
+            {
+              lastStmt = *childIter;
+            }
 
-	  if (isa<DeclStmt>(*childIter))
-	    {
-	      DeclStmt *decl_stmt = dyn_cast<DeclStmt>(*childIter);
-	      lastLocalDecl = *childIter;
+          if (isa<DeclStmt>(*childIter))
+            {
+              DeclStmt *decl_stmt = dyn_cast<DeclStmt>(*childIter);
+              lastLocalDecl = *childIter;
 
-	      if (decl_stmt->isSingleDecl() && depth == 0)
-		{
-		  Decl *decl = decl_stmt->getSingleDecl();
+              if (decl_stmt->isSingleDecl() && depth == 0)
+                {
+                  Decl *decl = decl_stmt->getSingleDecl();
 
-		  if (isa<NamedDecl>(decl))
-		    {
-		      // Build a list of local variables to check newLocals against for
-		      // variable naming conflicts before injecting new variables.
-		      NamedDecl* named = dyn_cast<NamedDecl>(decl);
+                  if (isa<NamedDecl>(decl))
+                    {
+                      // Build a list of local variables to check newLocals against for
+                      // variable naming conflicts before injecting new variables.
+                      NamedDecl* named = dyn_cast<NamedDecl>(decl);
 
-		      existingLocals.push_back (named->getNameAsString());
-		    }
-		}
-	    }
+                      existingLocals.push_back (named->getNameAsString());
+                    }
+                }
+            }
 
-	  Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1);
-	  if (newStmt)
-	    *childIter = newStmt;
-	}
+          Stmt *newStmt = RewriteFunctionBodyOrGlobalInitializer(*childIter, depth + 1);
+          if (newStmt)
+            *childIter = newStmt;
+        }
     }
 
   if (MemberExpr *memberExpr = dyn_cast<MemberExpr>(stmt))
     {
       if (memberExpr->isArrow())
-	{
-	  Expr *base = memberExpr->getBase()->IgnoreParens();
-	  FieldDecl *memberDecl = dyn_cast<FieldDecl>(memberExpr->getMemberDecl());
-	  const char *memberName = memberDecl->getNameAsCString();
+        {
+          Expr *base = memberExpr->getBase()->IgnoreParens();
+          FieldDecl *memberDecl = dyn_cast<FieldDecl>(memberExpr->getMemberDecl());
+          const char *memberName = memberDecl->getNameAsCString();
 
-	  if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(base))
-	    {
-	      ValueDecl *valueDecl = dyn_cast<ValueDecl>(declRefExpr->getDecl());
-	      QualType type = valueDecl->getType();
-	      const std::string declName = valueDecl->getNameAsString();
+          if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(base))
+            {
+              ValueDecl *valueDecl = dyn_cast<ValueDecl>(declRefExpr->getDecl());
+              QualType type = valueDecl->getType();
+              const std::string declName = valueDecl->getNameAsString();
 
-	      RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
+              RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
 
-	      if (item == NULL)
-		return stmt;
+              if (item == NULL)
+                return stmt;
 
-	      if (HandleUnaryOperator(stmt, memberDecl->getType(), item->getFormattedAccessor(declName)) ||
-		  HandleBinaryOperator(stmt, item->getFormattedAccessor(declName)) ||
-		  HandleCompoundAssignOperator(stmt, item->getFormattedAccessor(declName)))
-		return stmt;
+              if (HandleUnaryOperator(stmt, memberDecl->getType(), item->getFormattedAccessor(declName)) ||
+                  HandleBinaryOperator(stmt, item->getFormattedAccessor(declName)) ||
+                  HandleCompoundAssignOperator(stmt, item->getFormattedAccessor(declName)))
+                return stmt;
 
-	      // FIXME: I think that the phys part here can be moved to just
-	      // the replacetext call since getchardata does it already...
-	      //
-	      if (item->hasGetRef ())
-		{
-		  SourceLocation start = stmt->getLocStart();
-		  SourceLocation end = stmt->getLocEnd();
-		  SourceLocation instStart = SM->getInstantiationLoc(start);
-		  SourceLocation instEnd = SM->getInstantiationLoc(end);
-		  std::string ref = item->getRefType;
-		  std::string localName = declName + "_" + memberName;
-		  const char* startBuf;
-		  const char* endBuf;
+              // FIXME: I think that the phys part here can be moved to just
+              // the replacetext call since getchardata does it already...
+              //
+              if (item->hasGetRef ())
+                {
+                  SourceLocation start = stmt->getLocStart();
+                  SourceLocation end = stmt->getLocEnd();
+                  SourceLocation instStart = SM->getInstantiationLoc(start);
+                  SourceLocation instEnd = SM->getInstantiationLoc(end);
+                  std::string ref = item->getRefType;
+                  std::string localName = declName + "_" + memberName;
+                  const char* startBuf;
+                  const char* endBuf;
 
-		  LocalReferenceItem local_item(ref, localName, item->accessor, declName);
+                  LocalReferenceItem local_item(ref, localName, item->accessor, declName);
 
-		  newLocals.push_back(local_item);
+                  newLocals.push_back(local_item);
 
-		  if (start != instStart ||
-		      end != instEnd)
-		    {
-		      InsertComment(std::string("/* REWRITE: Can't rewrite some or all of the next expression due\n"
-						" *          to macro expansions. Use " + localName + ".\n"
-						" */"));
-		    }
+                  if (start != instStart ||
+                      end != instEnd)
+                    {
+                      InsertComment(std::string("/* REWRITE: Can't rewrite some or all of the next expression due\n"
+                                                " *          to macro expansions. Use " + localName + ".\n"
+                                                " */"));
+                    }
 
-		  startBuf = SM->getCharacterData(start);
-		  endBuf = SM->getCharacterData(end) + strlen(memberName);
+                  startBuf = SM->getCharacterData(start);
+                  endBuf = SM->getCharacterData(end) + strlen(memberName);
 
-		  ReplaceText(start, endBuf - startBuf, localName.c_str(), localName.size());
-		}
-	      else
-		{
-		  SourceLocation start = stmt->getLocStart();
-		  SourceLocation end = stmt->getLocEnd();
-		  SourceLocation instStart = SM->getInstantiationLoc(start);
-		  SourceLocation instEnd = SM->getInstantiationLoc(end);
+                  ReplaceText(start, endBuf - startBuf, localName.c_str(), localName.size());
+                }
+              else
+                {
+                  SourceLocation start = stmt->getLocStart();
+                  SourceLocation end = stmt->getLocEnd();
+                  SourceLocation instStart = SM->getInstantiationLoc(start);
+                  SourceLocation instEnd = SM->getInstantiationLoc(end);
 
-		  if (start != instStart ||
-		      end != instEnd)
-		    {
-		      InsertComment(std::string("/* REWRITE: Can't rewrite some or all of the next expression due\n"
-						" *          to macro expansions. Use " + item->getFormattedAccessor(declName) + ".\n"
-						" */"));
-		    }
+                  if (start != instStart ||
+                      end != instEnd)
+                    {
+                      InsertComment(std::string("/* REWRITE: Can't rewrite some or all of the next expression due\n"
+                                                " *          to macro expansions. Use " + item->getFormattedAccessor(declName) + ".\n"
+                                                " */"));
+                    }
 
-		  const char *startBuf = SM->getCharacterData(start);
-		  const char *endBuf = SM->getCharacterData(end) + strlen(memberName);
+                  const char *startBuf = SM->getCharacterData(start);
+                  const char *endBuf = SM->getCharacterData(end) + strlen(memberName);
 
-		  std::string str = item->getFormattedAccessor(declName);
+                  std::string str = item->getFormattedAccessor(declName);
 
-		  if (!item->accessor.empty())
-		    ReplaceText(start, endBuf - startBuf, str.c_str(), str.size());
+                  if (!item->accessor.empty())
+                    ReplaceText(start, endBuf - startBuf, str.c_str(), str.size());
 
-		  if (lastStmt && !item->comment.empty())
-		    {
-		      InsertComment(item->getFormattedComment());
-		    }
-		}
+                  if (lastStmt && !item->comment.empty())
+                    {
+                      InsertComment(item->getFormattedComment());
+                    }
+                }
 
-	      return stmt;
-	    }
-	  else if (CastExpr *castExpr = dyn_cast<CastExpr>(base))
-	    {
-	      QualType type = castExpr->getType();
+              return stmt;
+            }
+          else if (CastExpr *castExpr = dyn_cast<CastExpr>(base))
+            {
+              QualType type = castExpr->getType();
 
-	      RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
-	      if (item == NULL)
-		return stmt;
+              RewriteItem *item = rewriteItemMap[RewriteItem::getKey(type.getAsString(), memberName)];
+              if (item == NULL)
+                return stmt;
 
-	      SourceLocation startLoc = stmt->getLocStart();
-	      SourceLocation endLoc = stmt->getLocEnd();
+              SourceLocation startLoc = stmt->getLocStart();
+              SourceLocation endLoc = stmt->getLocEnd();
 
-	      // Need to get logical loc since the loc is pointing to the
-	      // macro definition.
-	      startLoc = SM->getInstantiationLoc(startLoc);
-	      endLoc = SM->getInstantiationLoc(endLoc);
+              // Need to get logical loc since the loc is pointing to the
+              // macro definition.
+              startLoc = SM->getInstantiationLoc(startLoc);
+              endLoc = SM->getInstantiationLoc(endLoc);
 
-	      const char *startBuf = SM->getCharacterData(startLoc);
-	      const char *endBuf = SM->getCharacterData(endLoc);
+              const char *startBuf = SM->getCharacterData(startLoc);
+              const char *endBuf = SM->getCharacterData(endLoc);
 
-	      if (endBuf > startBuf)
-		{
-		  // Get the cast but not the arrow, i.e. FOO(bar).
-		  std::string str = item->getFormattedAccessor(std::string(startBuf, endBuf - startBuf - 2));
+              if (endBuf > startBuf)
+                {
+                  // Get the cast but not the arrow, i.e. FOO(bar).
+                  std::string str = item->getFormattedAccessor(std::string(startBuf, endBuf - startBuf - 2));
 
-		  if (HandleUnaryOperator(stmt, memberDecl->getType(), str) ||
-		      HandleBinaryOperator(stmt, str) ||
-		      HandleCompoundAssignOperator(stmt, str))
-		    return stmt;
+                  if (HandleUnaryOperator(stmt, memberDecl->getType(), str) ||
+                      HandleBinaryOperator(stmt, str) ||
+                      HandleCompoundAssignOperator(stmt, str))
+                    return stmt;
 
-		  if (!item->accessor.empty())
-		    ReplaceText(startLoc, endBuf - startBuf + strlen(memberName), str.c_str(), str.size());
-		}
-	      else
-		{
-		  // Happens when the sourceloc isn't tracked properly so we
-		  // can't do any rewrite (currently this happens for nested
-		  // macros for example). We could try to directly parse the
-		  // text buffer and do some simple rewrites, that could help
-		  // with cases like "GTK_BOX (GTK_DIALOG (dialog)->vbox)".
-		}
+                  if (!item->accessor.empty())
+                    ReplaceText(startLoc, endBuf - startBuf + strlen(memberName), str.c_str(), str.size());
+                }
+              else
+                {
+                  // Happens when the sourceloc isn't tracked properly so we
+                  // can't do any rewrite (currently this happens for nested
+                  // macros for example). We could try to directly parse the
+                  // text buffer and do some simple rewrites, that could help
+                  // with cases like "GTK_BOX (GTK_DIALOG (dialog)->vbox)".
+                }
 
-	      if (lastStmt && !item->comment.empty())
-		{
-		  InsertComment(item->getFormattedComment());
-		}
+              if (lastStmt && !item->comment.empty())
+                {
+                  InsertComment(item->getFormattedComment());
+                }
 
-	      return stmt;
-	    }
-	}
+              return stmt;
+            }
+        }
     }
 
   // Inject any new local variables needed for get-by-reference functions
@@ -794,58 +804,58 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
       newLocals.erase (std::unique (newLocals.begin(), newLocals.end()), newLocals.end());
 
       if (!isa<DeclStmt>(stmt) && depth == 0)
-	{
-	  std::vector<LocalReferenceItem>::iterator iter, end;
-	  std::string newText = "";
-	  SourceLocation loc;
-	  bool removeLast = false;
+        {
+          std::vector<LocalReferenceItem>::iterator iter, end;
+          std::string newText = "";
+          SourceLocation loc;
+          bool removeLast = false;
 
-	  if (lastLocalDecl == NULL)
-	    {
-	      std::string localName;
-	      Stmt::child_iterator child = stmt->child_begin();
-	      loc = (*child)->getLocStart();
+          if (lastLocalDecl == NULL)
+            {
+              std::string localName;
+              Stmt::child_iterator child = stmt->child_begin();
+              loc = (*child)->getLocStart();
 
-	      for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
-		{
-		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
-		  newText += (*iter).refType + " " + localName + ";\n";
+              for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
+                {
+                  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
+                  newText += (*iter).refType + " " + localName + ";\n";
 
-		  (*iter).localName = localName;
-		}
-	    }
-	  else
-	    {
-	      std::string localName;
-	      loc = lastLocalDecl->getLocEnd();
+                  (*iter).localName = localName;
+                }
+            }
+          else
+            {
+              std::string localName;
+              loc = lastLocalDecl->getLocEnd();
 
-	      newText += ";\n";
+              newText += ";\n";
 
-	      for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
-		{
-		  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
-		  newText += "  " + (*iter).refType + " " + localName + ";\n";
+              for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
+                {
+                  localName = CreateUniqueLocalName((*iter).localName, existingLocals);
+                  newText += "  " + (*iter).refType + " " + localName + ";\n";
 
-		  (*iter).localName = localName;
-		}
+                  (*iter).localName = localName;
+                }
 
-	      removeLast = true;
-	    }
+              removeLast = true;
+            }
 
-	  newText += "\n";
+          newText += "\n";
 
-	  for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
-	    {
-	      // Move this into getFormattedAccessor() probably
-	      newText += "  " + (*iter).accessor + "(" + (*iter).objName + ", &" + (*iter).localName + ");\n";
-	    }
+          for (iter = newLocals.begin(), end = newLocals.end(); iter != end; iter++)
+            {
+              // Move this into getFormattedAccessor() probably
+              newText += "  " + (*iter).accessor + "(" + (*iter).objName + ", &" + (*iter).localName + ");\n";
+            }
 
-	  InsertText(loc, newText.c_str(), newText.size());
+          InsertText(loc, newText.c_str(), newText.size());
 
-	  if (removeLast)
-	    {
-	      RemoveText(loc, 1);  // remove trailing semicolon
-	    }
+          if (removeLast)
+            {
+              RemoveText(loc, 1);  // remove trailing semicolon
+            }
 	}
     }
 

@@ -50,10 +50,11 @@ namespace {
     std::string getRefType;
     bool appendNullArg;
 
-    RewriteItem(const char *klass, const char *member, const char *comment, const char *accessor,
-                const char *getRefType, bool appendNullArg)
+    RewriteItem(const std::string& klass, const std::string& member,
+		const std::string& comment, const std::string& accessor,
+                const std::string& getRefType, bool appendNullArg)
       : klass(klass), member(member), comment(comment), accessor(accessor),
-	getRefType(getRefType ? getRefType : ""), appendNullArg(appendNullArg) {}
+	getRefType(getRefType), appendNullArg(appendNullArg) {}
 
     static std::string getKey(std::string type, std::string member) {
       return type + "::" + member;
@@ -152,7 +153,7 @@ namespace {
       Diags.Report(Context->getFullLoc(Start), RewriteFailedDiag);
     }
 
-    char *GetRewriteItemAttribute(std::string line, const char *str)
+    std::string GetRewriteItemAttribute(std::string line, const char *str)
     {
       size_t start, end;
       std::string match = str;
@@ -164,17 +165,17 @@ namespace {
         start += match.size();
         end = line.find("]", start);
         if (end != std::string::npos) {
-          return strdup(line.substr(start, end - start).c_str());
+          return line.substr(start, end - start);
         }
       }
 
-      return NULL;
+      return "";
     }
 
-    char *GetRewriteItemAttributeString(std::string line, const char *str)
+    std::string GetRewriteItemAttributeString(std::string line, const char *str)
     {
-      char *tmp = GetRewriteItemAttribute(line, str);
-      if (tmp == NULL)
+      std::string tmp = GetRewriteItemAttribute(line, str);
+      if (tmp.empty())
         tmp = strdup ("");
       return tmp;
     }
@@ -182,11 +183,10 @@ namespace {
     bool GetRewriteItemAttributeBool(std::string line, const char *str)
     {
       bool ret = false;
-      char *tmp = GetRewriteItemAttribute(line, str);
+      std::string tmp = GetRewriteItemAttribute(line, str);
 
-      if (tmp) {
+      if (!tmp.empty()) {
         ret = true;
-        free (tmp);
       }
 
       return ret;
@@ -217,7 +217,7 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
   std::string klass;
 
   while (getline(infile, line)) {
-    char *member, *accessor, *comment, *function, *getRefType;
+    std::string member, accessor, setter, comment, function, getRefType;
     bool appendNullArg;
 
     // Skip comments and empty lines.
@@ -240,32 +240,22 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
 
     member = GetRewriteItemAttribute(line, "get");
     accessor = GetRewriteItemAttribute(line, "accessor");
+    setter = GetRewriteItemAttribute(line, "setter");
     comment = GetRewriteItemAttributeString(line, "comment");
     appendNullArg = GetRewriteItemAttributeBool(line, "append-null-arg");
     function = GetRewriteItemAttribute(line, "function");
     getRefType = GetRewriteItemAttribute(line, "getref");
 
-    if (member && accessor) {
+    if (!member.empty() && !accessor.empty()) {
       RewriteItem *item = new RewriteItem (klass.c_str(),
                                            member, comment,
                                            accessor, getRefType,
 					   appendNullArg);
       rewriteItemMap[item->getKey()] = item;
     }
-    else if (function && accessor) {
+    else if (!function.empty() && !accessor.empty()) {
       // ...
     }
-
-    if (member)
-      free (member);
-    if (accessor)
-      free (accessor);
-    if (comment)
-      free (comment);
-    if (function)
-      free (function);
-    if (getRefType)
-      free (getRefType);
   }
 }
 
@@ -440,20 +430,20 @@ void RewriteGtk::InsertComment(std::string comment)
   if (first != std::string::npos)
     prevLine = prevLine.substr(first, prevLine.find_last_not_of(" \t") - first + 1);
 
-  if (prevLine != comment) {
+  if (prevLine != comment)
+    {
+      // Replacing all newlines in the comment with the indentation prefix.
+      size_t i = 0;
+      while ((i = comment.find('\n', i)) != std::string::npos)
+	{
+	  comment = comment.insert(i+1, std::string(startBuf+1, endBuf));
+	  i += endBuf - startBuf;
+	}
 
-    // Replacing all newlines in the comment with the indentation prefix.
-    size_t i = 0;
-    while ((i = comment.find('\n', i)) != std::string::npos)
-      {
-        comment = comment.insert(i+1, std::string(startBuf+1, endBuf));
-        i += endBuf-startBuf;
-      }
+      comment.append(startBuf, endBuf);
 
-    comment.append(startBuf, endBuf);
-
-    InsertText(commentLoc, comment.c_str(), comment.size());
-  }
+      InsertText(commentLoc, comment.c_str(), comment.size());
+    }
 }
 
 bool RewriteGtk::HandleUnaryOperator(Stmt *stmt, QualType returnType, std::string accessor)

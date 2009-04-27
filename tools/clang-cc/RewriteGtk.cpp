@@ -47,13 +47,13 @@ namespace {
   public:
     std::string comment;
     std::string accessor;
-    std::string reference;
+    std::string getRefType;
     bool appendNullArg;
 
     RewriteItem(const char *klass, const char *member, const char *comment, const char *accessor,
-                const char *reference, bool appendNullArg)
+                const char *getRefType, bool appendNullArg)
       : klass(klass), member(member), comment(comment), accessor(accessor),
-	reference(reference ? reference : ""), appendNullArg(appendNullArg) {}
+	getRefType(getRefType ? getRefType : ""), appendNullArg(appendNullArg) {}
 
     static std::string getKey(std::string type, std::string member) {
       return type + "::" + member;
@@ -78,12 +78,8 @@ namespace {
         return "/* REWRITE: " + comment + " */";
     }
 
-    bool hasReference() {
-      return !reference.empty();
-    }
-
-    std::string getReferenceType() {
-      return reference;
+    bool hasGetRef() {
+      return !getRefType.empty();
     }
   };
 
@@ -221,7 +217,7 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
   std::string klass;
 
   while (getline(infile, line)) {
-    char *member, *accessor, *comment, *function, *reference;
+    char *member, *accessor, *comment, *function, *getRefType;
     bool appendNullArg;
 
     // Skip comments and empty lines.
@@ -247,12 +243,12 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
     comment = GetRewriteItemAttributeString(line, "comment");
     appendNullArg = GetRewriteItemAttributeBool(line, "append-null-arg");
     function = GetRewriteItemAttribute(line, "function");
-    reference = GetRewriteItemAttribute(line, "reference");
+    getRefType = GetRewriteItemAttribute(line, "getref");
 
     if (member && accessor) {
       RewriteItem *item = new RewriteItem (klass.c_str(),
                                            member, comment,
-                                           accessor, reference,
+                                           accessor, getRefType,
 					   appendNullArg);
       rewriteItemMap[item->getKey()] = item;
     }
@@ -268,8 +264,8 @@ RewriteGtk::RewriteGtk(std::string inFile, std::string outFile, Diagnostic &D, c
       free (comment);
     if (function)
       free (function);
-    if (reference)
-      free (reference);
+    if (getRefType)
+      free (getRefType);
   }
 }
 
@@ -690,13 +686,13 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 	      // FIXME: I think that the phys part here can be moved to just
 	      // the replacetext call since getchardata does it already...
 	      //
-	      if (item->hasReference ())
+	      if (item->hasGetRef ())
 		{
 		  SourceLocation start = stmt->getLocStart();
 		  SourceLocation end = stmt->getLocEnd();
 		  SourceLocation instStart = SM->getInstantiationLoc(start);
 		  SourceLocation instEnd = SM->getInstantiationLoc(end);
-		  std::string ref = item->getReferenceType();
+		  std::string ref = item->getRefType;
 		  std::string localName = declName + "_" + memberName;
 		  const char* startBuf;
 		  const char* endBuf;
@@ -812,6 +808,7 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 	  std::vector<LocalReferenceItem>::iterator iter, end;
 	  std::string newText = "";
 	  SourceLocation loc;
+	  bool removeLast = false;
 
 	  if (lastLocalDecl == NULL)
 	    {
@@ -841,6 +838,8 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 
 		  (*iter).localName = localName;
 		}
+
+	      removeLast = true;
 	    }
 
 	  newText += "\n";
@@ -852,7 +851,11 @@ Stmt *RewriteGtk::RewriteFunctionBodyOrGlobalInitializer(Stmt *stmt, int depth)
 	    }
 
 	  InsertText(loc, newText.c_str(), newText.size());
-	  RemoveText(loc, 1);  // remove trailing semicolon
+
+	  if (removeLast)
+	    {
+	      RemoveText(loc, 1);  // remove trailing semicolon
+	    }
 	}
     }
 
